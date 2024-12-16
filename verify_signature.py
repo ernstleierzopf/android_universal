@@ -198,9 +198,9 @@ def main(argv):
             avbhdr=AvbVBMetaHeader(signature[:AvbVBMetaHeader.SIZE])
             release_string=avbhdr.release_string.replace(b"\x00",b"").decode('utf-8')
             print(f"\nAVB >=2.0 vbmeta detected: {release_string}\n----------------------------------------")
-            if " 1.0" not in release_string and " 1.1" not in release_string:
-                print("Sorry, only avb version <=1.1 is currently implemented")
-                exit(0)
+            # if " 1.0" not in release_string and " 1.1" not in release_string:
+            #     print("Sorry, only avb version <=1.1 is currently implemented")
+            #     exit(0)
             hashdata=signature[avbhdr.SIZE+avbhdr.authentication_data_block_size:]
             imgavbhash=AvbHashDescriptor(hashdata)
             print("Image-Target: \t\t\t\t" + str(imgavbhash.partition_name.decode('utf-8')))
