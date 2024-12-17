@@ -220,21 +220,21 @@ def main(argv):
             signature=data[ftr.vbmeta_offset:]
             data=data[0:ftr.vbmeta_offset]
             avbhdr=AvbVBMetaHeader(signature[:AvbVBMetaHeader.SIZE])
-            release_string=avbhdr.release_string.replace(b"\x00",b"").decode('utf-8')
+            release_string=avbhdr.release_string.replace("\x00", "")
             print(f"\nAVB >=2.0 vbmeta detected: {release_string}\n----------------------------------------")
             # if " 1.0" not in release_string and " 1.1" not in release_string:
             #     print("Sorry, only avb version <=1.1 is currently implemented")
             #     exit(0)
             hashdata=signature[avbhdr.SIZE+avbhdr.authentication_data_block_size:]
             imgavbhash=AvbHashDescriptor(hashdata)
-            print("Image-Target: \t\t\t\t" + str(imgavbhash.partition_name.decode('utf-8')))
+            print("Image-Target: \t\t\t\t" + str(imgavbhash.partition_name))
             # digest_size = len(hashlib.new(name=avbhash.hash_algorithm).digest())
             # digest_padding = round_to_pow2(digest_size) - digest_size
             # block_size=4096
             # (hash_level_offsets, tree_size) = calc_hash_level_offsets(avbhash.image_size, block_size, digest_size + digest_padding)
             # root_digest, hash_tree = generate_hash_tree(fr, avbhash.image_size, block_size, avbhash.hash_algorithm, avbhash.salt, digest_padding, hash_level_offsets, tree_size)
 
-            ctx=hashlib.new(name=imgavbhash.hash_algorithm.decode('utf-8'))
+            ctx=hashlib.new(name=imgavbhash.hash_algorithm)
             ctx.update(imgavbhash.salt)
             ctx.update(data[:imgavbhash.image_size])
             root_digest=ctx.digest()
