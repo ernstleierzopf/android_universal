@@ -153,7 +153,7 @@ def getheader(inputfile):
         magic = rf.read(0x9)
 
     with open(inputfile, 'rb') as rf:
-        if re.match(b"^ANDROID![A-Z]", magic) is not None:
+        if re.match(b"^ANDROID![A-Z]", magic) is not None or param.page_size == 0:
             header = rf.read(0x661)
             fields = unpack('<9sIIIIIIIIII16s512s8I1024s', header)
             param.magic = fields[0]
@@ -171,7 +171,6 @@ def getheader(inputfile):
             param.cmdline = fields[12]
             param.id = [fields[13],fields[14],fields[15],fields[16],fields[17],fields[18],fields[19],fields[20]]
             param.extra_cmdline = fields[21]
-
     return param
 
 def int_to_bytes(x):
