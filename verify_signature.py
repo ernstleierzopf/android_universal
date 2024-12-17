@@ -13,6 +13,7 @@ from pyasn1.codec.der.decoder import decode as der_decoder
 from pyasn1.codec.der.encoder import encode as der_encoder
 from root.scripts.Library.utils import extract_key, get_next_modulus, rsa
 import shutil
+import re
 from struct import unpack, pack
 version="v2.0"
 
@@ -147,6 +148,30 @@ def getheader(inputfile):
         param.cmdline = fields[12]
         param.id = [fields[13],fields[14],fields[15],fields[16],fields[17],fields[18],fields[19],fields[20]]
         param.extra_cmdline = fields[21]
+
+    with open(inputfile, 'rb') as rf:
+        magic = rf.read(0x9)
+
+    with open(inputfile, 'rb') as rf:
+        if re.match(b"^ANDROID![A-Z]", magic) is not None:
+            header = rf.read(0x661)
+            fields = unpack('<9sIIIIIIIIII16s512s8I1024s', header)
+            param.magic = fields[0]
+            param.kernel_size = fields[1]
+            param.kernel_addr = fields[2]
+            param.ramdisk_size = fields[3]
+            param.ramdisk_addr = fields[4]
+            param.second_size = fields[5]
+            param.second_addr = fields[6]
+            param.tags_addr = fields[7]
+            param.page_size = fields[8]
+            param.qcdt_size_or_header_version = fields[9]
+            param.os_version = fields[10]
+            param.name = fields[11]
+            param.cmdline = fields[12]
+            param.id = [fields[13],fields[14],fields[15],fields[16],fields[17],fields[18],fields[19],fields[20]]
+            param.extra_cmdline = fields[21]
+
     return param
 
 def int_to_bytes(x):
