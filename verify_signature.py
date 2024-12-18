@@ -193,26 +193,28 @@ def main(argv):
     parser.add_argument('--length', '-l', dest='inject', action='store_true', default=False, help='adapt signature length')
     args = parser.parse_args()
     rs=rsa()
-    if args.filename=="":
-        print("Usage: verify_signature.py -f [boot.img]")
-        exit(0)
-    param=getheader(args.filename)
-    kernelsize = int((param.kernel_size + param.page_size - 1) / param.page_size) * param.page_size
-    ramdisksize = int((param.ramdisk_size + param.page_size - 1) / param.page_size) * param.page_size
-    secondsize = int((param.second_size + param.page_size - 1) / param.page_size) * param.page_size
-    qcdtsize = int((param.qcdt_size_or_header_version + param.page_size - 1) / param.page_size) * param.page_size
-    
-    print("Kernel=0x%08X,\tlength=0x%08X" % (param.page_size, kernelsize))
-    print("Ramdisk=0x%08X,\tlength=0x%08X" % ((param.page_size+kernelsize),ramdisksize))
-    print("Second=0x%08X,\tlength=0x%08X" % ((param.page_size+kernelsize+ramdisksize),secondsize))
-    print("QCDT=0x%08X,\tlength=0x%08X" % ((param.page_size+kernelsize+ramdisksize+secondsize),qcdtsize))
-    if qcdtsize==2048:
-        qcdtsize=0 #MTK fix
-    length=param.page_size+kernelsize+ramdisksize+secondsize+qcdtsize
-    print("Signature start=0x%08X" % length)
+    #if args.filename=="":
+    #    print("Usage: verify_signature.py -f [boot.img]")
+    #    exit(0)
 
-    with open(args.filename,'rb') as fr:
-        data=fr.read()
+    if os.path.exists(args.filename):
+        param = getheader(args.filename)
+        kernelsize = int((param.kernel_size + param.page_size - 1) / param.page_size) * param.page_size
+        ramdisksize = int((param.ramdisk_size + param.page_size - 1) / param.page_size) * param.page_size
+        secondsize = int((param.second_size + param.page_size - 1) / param.page_size) * param.page_size
+        qcdtsize = int((param.qcdt_size_or_header_version + param.page_size - 1) / param.page_size) * param.page_size
+
+        print("Kernel=0x%08X,\tlength=0x%08X" % (param.page_size, kernelsize))
+        print("Ramdisk=0x%08X,\tlength=0x%08X" % ((param.page_size + kernelsize), ramdisksize))
+        print("Second=0x%08X,\tlength=0x%08X" % ((param.page_size + kernelsize + ramdisksize), secondsize))
+        print("QCDT=0x%08X,\tlength=0x%08X" % ((param.page_size + kernelsize + ramdisksize + secondsize), qcdtsize))
+        if qcdtsize == 2048:
+            qcdtsize = 0  # MTK fix
+        length = param.page_size + kernelsize + ramdisksize + secondsize + qcdtsize
+        print("Signature start=0x%08X" % length)
+
+        with open(args.filename,'rb') as fr:
+            data=fr.read()
         filesize=os.stat(args.filename).st_size
         footerpos=(filesize//0x1000*0x1000)-AvbFooter.SIZE
         if data[footerpos:footerpos+4]==b"AVBf":
@@ -245,112 +247,6 @@ def main(argv):
             print("\nCalced Image-Hash: \t\t\t" + img_digest)
             #print("Calced Hash_Tree: " + str(binascii.hexlify(hash_tree)))
             print("Image-Hash: \t\t\t\t" + img_avb_digest)
-            avbmetacontent={}
-            vbmeta=None
-            if args.vbmetaname=="":
-                if os.path.exists("vbmeta.img"):
-                    args.vbmetaname="vbmeta.img"
-            if args.vbmetaname!="":
-                with open(args.vbmetaname,'rb') as vbm:
-                    vbmeta=vbm.read()
-                    if vbmeta[:4]==b"DHTB":
-                        print("!!!! Detected Spreadtrum special hash header !!!!")
-                        print("SHA256-Hash :\t\t\t\t"+hexlify(vbmeta[8:0x28]).decode('utf-8'))
-                        length=unpack("<I",vbmeta[0x30:0x34])[0]
-                        vbmeta=vbmeta[0x200:0x200+length]
-                        calcedhash=hashlib.sha256(vbmeta).digest()
-                        print("Calced Hash :\t\t\t\t"+hexlify(calcedhash).decode('utf-8'))
-                    else:
-                        idx=vbmeta.find(b"AVB0")
-                        if idx!=-1:
-                            vbmeta=vbmeta[idx:]
-                    avbhdr=AvbVBMetaHeader(vbmeta[:AvbVBMetaHeader.SIZE])
-                    if avbhdr.magic!=b'AVB0':
-                        print("Unknown vbmeta data")
-                        exit(0)
-                    class authentication_data(object):
-                        def __init__(self,hdr,data):
-                            self.hash=data[0x100+hdr.hash_offset:0x100+hdr.hash_offset+hdr.hash_size]
-                            self.signature=data[0x100+hdr.signature_offset:0x100+hdr.signature_offset+hdr.signature_size]
-
-                    class auxilary_data(object):
-                        def __init__(self, hdr, data):
-                            self.data=data[0x100+hdr.authentication_data_block_size:0x100+hdr.authentication_data_block_size+hdr.auxiliary_data_block_size]
-
-                    authdata=authentication_data(avbhdr,vbmeta)
-                    auxdata=auxilary_data(avbhdr,vbmeta).data
-
-                    auxlen=len(auxdata)
-                    i=0
-                    while (i<auxlen):
-                        desc=AvbDescriptor(auxdata[i:])
-                        data=auxdata[i:]
-                        if desc.tag==AvbPropertyDescriptor.TAG:
-                            avbproperty=AvbPropertyDescriptor(data)
-                            avbmetacontent["property"]=dict(avbproperty=avbproperty)
-                        elif desc.tag==AvbHashtreeDescriptor.TAG:
-                            avbhashtree=AvbHashtreeDescriptor(data)
-                            partition_name=avbhashtree.partition_name
-                            salt=avbhashtree.salt
-                            root_digest=avbhashtree.root_digest
-                            avbmetacontent[partition_name]=dict(salt=salt,root_digest=root_digest)
-                        elif desc.tag==AvbHashDescriptor.TAG:
-                            avbhash=AvbHashDescriptor(data)
-                            partition_name=avbhash.partition_name
-                            salt=avbhash.salt
-                            digest=avbhash.digest
-                            avbmetacontent[partition_name] = dict(salt=salt,digest=digest)
-                        elif desc.tag==AvbKernelCmdlineDescriptor.TAG:
-                            avbcmdline=AvbKernelCmdlineDescriptor(data)
-                            kernel_cmdline=avbcmdline.kernel_cmdline
-                            avbmetacontent["cmdline"] = dict(kernel_cmdline=kernel_cmdline)
-                        elif desc.tag==AvbChainPartitionDescriptor.TAG:
-                            avbchainpartition=AvbChainPartitionDescriptor(data)
-                            partition_name=avbchainpartition.partition_name
-                            public_key=avbchainpartition.public_key
-                            avbmetacontent[partition_name] = dict(public_key=public_key)
-                        i += desc.SIZE+len(desc.data)
-
-            vbmeta_digest=None
-            if imgavbhash.partition_name in avbmetacontent:
-                if "digest" in avbmetacontent[imgavbhash.partition_name]:
-                    digest=avbmetacontent[imgavbhash.partition_name]["digest"]
-                    vbmeta_digest = str(hexlify(digest).decode('utf-8'))
-                    print("VBMeta-Image-Hash: \t\t\t" + vbmeta_digest)
-            else:
-                print("Couldn't find "+imgavbhash.partition_name+" in "+args.vbmetaname)
-                exit(0)
-
-            if vbmeta!=None:
-                pubkeydata=vbmeta[AvbVBMetaHeader.SIZE+avbhdr.authentication_data_block_size+avbhdr.public_key_offset:
-                                  AvbVBMetaHeader.SIZE+avbhdr.authentication_data_block_size+avbhdr.public_key_offset
-                                  +avbhdr.public_key_size]
-                modlen = unpack(">I",pubkeydata[:4])[0]//4
-                n0inv = unpack(">I", pubkeydata[4:8])[0]
-                modulus=hexlify(pubkeydata[8:8+modlen]).decode('utf-8')
-                print("\nSignature-RSA-Modulus (n):\t"+modulus)
-                print("Signature-n0inv: \t\t\t" + str(n0inv))
-                KEYPATH = "key"
-                if (os.path.exists(KEYPATH)):
-                    shutil.rmtree(KEYPATH)
-                os.mkdir(KEYPATH)
-                if os.path.exists("key"):
-                    keyname = extract_key(modulus, KEYPATH)
-                    if keyname:
-                        print(f"\nKey found: {keyname}")
-            else:
-                print("VBMeta info missing... please copy vbmeta.img to the directory.")
-            state=3
-            if img_digest==img_avb_digest:
-                state=0
-                if vbmeta_digest!=None:
-                    if vbmeta_digest==img_digest:
-                        state=0
-                    else:
-                        state=3
-            rotstate(state)
-
-            exit(0)
         else:
             signature=data[length:]
             data=data[:length]
@@ -426,6 +322,113 @@ def main(argv):
                 root_of_trust_unlocked=sha256.digest()
                 print("\nTZ Root of trust (locked):\t\t" + str(hexlify(root_of_trust_locked).decode('utf-8')))
                 print("TZ Root of trust (unlocked):\t" + str(hexlify(root_of_trust_unlocked).decode('utf-8')))
+
+    avbmetacontent = {}
+    vbmeta=None
+    if args.vbmetaname=="":
+        if os.path.exists("vbmeta.img"):
+            args.vbmetaname="vbmeta.img"
+    if args.vbmetaname!="":
+        with open(args.vbmetaname,'rb') as vbm:
+            vbmeta=vbm.read()
+            if vbmeta[:4]==b"DHTB":
+                print("!!!! Detected Spreadtrum special hash header !!!!")
+                print("SHA256-Hash :\t\t\t\t"+hexlify(vbmeta[8:0x28]).decode('utf-8'))
+                length=unpack("<I",vbmeta[0x30:0x34])[0]
+                vbmeta=vbmeta[0x200:0x200+length]
+                calcedhash=hashlib.sha256(vbmeta).digest()
+                print("Calced Hash :\t\t\t\t"+hexlify(calcedhash).decode('utf-8'))
+            else:
+                idx=vbmeta.find(b"AVB0")
+                if idx!=-1:
+                    vbmeta=vbmeta[idx:]
+            avbhdr=AvbVBMetaHeader(vbmeta[:AvbVBMetaHeader.SIZE])
+            if avbhdr.magic!=b'AVB0':
+                print("Unknown vbmeta data")
+                exit(0)
+            class authentication_data(object):
+                def __init__(self,hdr,data):
+                    self.hash=data[0x100+hdr.hash_offset:0x100+hdr.hash_offset+hdr.hash_size]
+                    self.signature=data[0x100+hdr.signature_offset:0x100+hdr.signature_offset+hdr.signature_size]
+
+            class auxilary_data(object):
+                def __init__(self, hdr, data):
+                    self.data=data[0x100+hdr.authentication_data_block_size:0x100+hdr.authentication_data_block_size+hdr.auxiliary_data_block_size]
+
+            authdata=authentication_data(avbhdr,vbmeta)
+            auxdata=auxilary_data(avbhdr,vbmeta).data
+
+            auxlen=len(auxdata)
+            i=0
+            while (i<auxlen):
+                desc=AvbDescriptor(auxdata[i:])
+                data=auxdata[i:]
+                if desc.tag==AvbPropertyDescriptor.TAG:
+                    avbproperty=AvbPropertyDescriptor(data)
+                    avbmetacontent["property"]=dict(avbproperty=avbproperty)
+                elif desc.tag==AvbHashtreeDescriptor.TAG:
+                    avbhashtree=AvbHashtreeDescriptor(data)
+                    partition_name=avbhashtree.partition_name
+                    salt=avbhashtree.salt
+                    root_digest=avbhashtree.root_digest
+                    avbmetacontent[partition_name]=dict(salt=salt,root_digest=root_digest)
+                elif desc.tag==AvbHashDescriptor.TAG:
+                    avbhash=AvbHashDescriptor(data)
+                    partition_name=avbhash.partition_name
+                    salt=avbhash.salt
+                    digest=avbhash.digest
+                    avbmetacontent[partition_name] = dict(salt=salt,digest=digest)
+                elif desc.tag==AvbKernelCmdlineDescriptor.TAG:
+                    avbcmdline=AvbKernelCmdlineDescriptor(data)
+                    kernel_cmdline=avbcmdline.kernel_cmdline
+                    avbmetacontent["cmdline"] = dict(kernel_cmdline=kernel_cmdline)
+                elif desc.tag==AvbChainPartitionDescriptor.TAG:
+                    avbchainpartition=AvbChainPartitionDescriptor(data)
+                    partition_name=avbchainpartition.partition_name
+                    public_key=avbchainpartition.public_key
+                    avbmetacontent[partition_name] = dict(public_key=public_key)
+                i += desc.SIZE+len(desc.data)
+
+    if vbmeta!=None:
+        pubkeydata=vbmeta[AvbVBMetaHeader.SIZE+avbhdr.authentication_data_block_size+avbhdr.public_key_offset:
+                            AvbVBMetaHeader.SIZE+avbhdr.authentication_data_block_size+avbhdr.public_key_offset
+                          +avbhdr.public_key_size]
+        modlen = unpack(">I",pubkeydata[:4])[0]//4
+        n0inv = unpack(">I", pubkeydata[4:8])[0]
+        modulus=hexlify(pubkeydata[8:8+modlen]).decode('utf-8')
+        print("\nSignature-RSA-Modulus (n):\t"+modulus)
+        print("Signature-n0inv: \t\t\t" + str(n0inv))
+        KEYPATH = "key"
+        if (os.path.exists(KEYPATH)):
+            shutil.rmtree(KEYPATH)
+        os.mkdir(KEYPATH)
+        if os.path.exists("key"):
+            keyname = extract_key(modulus, KEYPATH)
+            if keyname:
+                print(f"\nKey found: {keyname}")
+    else:
+        print("VBMeta info missing... please copy vbmeta.img to the directory.")
+
+    if os.path.exists(args.filename):
+        vbmeta_digest=None
+        if imgavbhash.partition_name in avbmetacontent:
+            if "digest" in avbmetacontent[imgavbhash.partition_name]:
+                digest=avbmetacontent[imgavbhash.partition_name]["digest"]
+                vbmeta_digest = str(hexlify(digest).decode('utf-8'))
+                print("VBMeta-Image-Hash: \t\t\t" + vbmeta_digest)
+        else:
+            print("Couldn't find "+imgavbhash.partition_name+" in "+args.vbmetaname)
+            exit(0)
+        state=3
+        if img_digest==img_avb_digest:
+            state=0
+            if vbmeta_digest!=None:
+                if vbmeta_digest==img_digest:
+                    state=0
+                else:
+                    state=3
+        rotstate(state)
+        exit(0)
 
     if (args.inject==True):
         pos = signature.find(target)
