@@ -409,7 +409,7 @@ def main(argv):
     else:
         print("VBMeta info missing... please copy vbmeta.img to the directory.")
 
-    if os.path.exists(args.filename):
+    if os.path.exists(args.filename) and data[footerpos:footerpos+4]==b"AVBf":
         vbmeta_digest=None
         if imgavbhash.partition_name in avbmetacontent:
             if "digest" in avbmetacontent[imgavbhash.partition_name]:
